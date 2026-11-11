@@ -1,0 +1,8 @@
+.env
+.env.*
+*.key
+__pycache__/
+.venv/
+.pytest_cache/
+spectra.png
+.claude/settings.local.json
