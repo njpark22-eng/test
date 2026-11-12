@@ -5,7 +5,7 @@
 ## 명령
 - 테스트: `uv run pytest`
 - 실행: `uv run python vibe_agent.py [--offline|--plot|--ui|--make-data]`
-  - `--make-data`: 가상 계측 데이터를 `data/CH1~CH4.xlsx`로 생성 (신호 생성 코드를 바꾸면 다시 실행)
+  - `--make-data`: 가상 계측 데이터를 `data/CH1~CH5.xlsx`로 생성 (신호 생성 코드를 바꾸면 다시 실행)
   - `--ui`: 채널 수 입력, 파일 선택, 분석 UI (tkinter). `--offline`을 같이 주면 항상 규칙 기반
 
 ## 규칙

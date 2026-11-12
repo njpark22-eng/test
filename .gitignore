@@ -6,3 +6,4 @@ __pycache__/
 .pytest_cache/
 spectra.png
 .claude/settings.local.json
+result-*.xlsx

@@ -1,28 +1,28 @@
 """진동 계측 진단 에이전트 (교육 시연용)
-- 계측 데이터(엑셀 4개, data/CH*.xlsx) 읽기 -> FFT -> 특징량 추출 -> 판정
+- 계측 데이터(엑셀 5개, data/CH*.xlsx) 읽기 -> FFT -> 특징량 추출 -> 판정
 - 엑셀 파일은 계측기에서 받은 time 데이터라고 가정 (시연에서는 --make-data로 가상 생성)
 - 기본: Claude가 도구(tool)를 호출하며 판단하는 에이전트
 - --offline : API 없이 규칙 기반으로만 실행 (시연 백업용)
-- --make-data : 가상 계측 데이터를 data/CH1~CH4.xlsx로 생성 (최초 1회)
+- --make-data : 가상 계측 데이터를 data/CH1~CH5.xlsx로 생성 (최초 1회)
 
 설치: pip install numpy anthropic matplotlib openpyxl
 실행: export ANTHROPIC_API_KEY=...  후  python vibe_agent.py
 """
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 import numpy as np
 
 FS, DUR = 5120, 2.0          # 샘플링 주파수(Hz), 길이(s)
 # 장비(채널)마다 회전수가 다름. 시연용 가상 데이터의 회전수 (rpm)
-DEFAULT_RPM = {"CH1": 1800, "CH2": 1500, "CH3": 1200, "CH4": 2400}
+DEFAULT_RPM = {"CH1": 900, "CH2": 1800, "CH3": 1500, "CH4": 1200, "CH5": 2400}
 RPM = dict(DEFAULT_RPM)      # 분석에 쓰는 채널별 회전수 (UI에서는 사용자 입력으로 덮어씀)
 # 베어링 볼 개수. 1이면 베어링 주파수를 쓰지 않는 채널(FFT 그림에 BPFO 표시/베어링 판정 없음)
-DEFAULT_BALLS = {"CH1": 1, "CH2": 9, "CH3": 1, "CH4": 1}
+DEFAULT_BALLS = {"CH1": 1, "CH2": 1, "CH3": 9, "CH4": 1, "CH5": 1}
 BALLS = dict(DEFAULT_BALLS)
 RMS_LIMIT = 4.5              # 속도 RMS 기준 (mm/s)
 t = np.arange(0, DUR, 1 / FS)
 DATA_DIR = Path(__file__).parent / "data"
-CHANNELS = ("CH1", "CH2", "CH3", "CH4")
+CHANNELS = ("CH1", "CH2", "CH3", "CH4", "CH5")
 
 
 # ---------- 1. 신호 생성 (속도 mm/s, peak 진폭 기준) ----------
@@ -41,22 +41,33 @@ def has_bearing(balls):
     return balls >= 2
 
 
-def make_signal(a1, a2=0.0, abrg=0.0, noise=0.1, seed=0, rpm=1800, balls=1):
+LOWF_HZ = 3.0   # 회전수 추정에서 제외하는 저주파 노이즈(드리프트) 영역. 2Hz 미만 + 윈도 누설 여유
+# 저주파 노이즈(ski-slope): (주파수 Hz, peak 진폭 mm/s). FFT RMS가 각각 약 80 mm/s 이상이 되도록 설정
+LOWNOISE_LIMIT = 20.0   # 2Hz 미만 저주파 성분 RMS가 이 값(mm/s)을 넘으면 계측 노이즈로 보고 재계측 권장
+LOWF_NOISE = ((0.5, 135.0), (1.0, 125.0), (1.5, 115.0))
+
+
+def make_signal(a1, a2=0.0, abrg=0.0, noise=0.1, seed=0, rpm=1800, balls=1, lowf=None):
+    """lowf: (주파수, peak 진폭) 목록. 주면 2Hz 미만 저주파 노이즈가 시간 신호 전체에 얹힘"""
     rng = np.random.default_rng(seed)
     fs1, fb = shaft_hz(rpm), bpfo_hz(rpm, balls)
     s = a1 * np.sin(2 * np.pi * fs1 * t)
     s += a2 * np.sin(2 * np.pi * 2 * fs1 * t + 0.5)
     s += abrg * np.sin(2 * np.pi * fb * t) + 0.5 * abrg * np.sin(2 * np.pi * 2 * fb * t)
+    for fl, al in (lowf or ()):
+        s += al * np.sin(2 * np.pi * fl * t + rng.uniform(0, 2 * np.pi))
     return s + rng.normal(0, noise, t.size)
 
 
 # 가상 계측 데이터 생성용 (실제 현장에서는 계측기가 엑셀을 만들어 준다고 가정)
 SYNTH = {
-    "CH1": make_signal(2.0, 0.2, 0.0, noise=0.2, seed=1, rpm=DEFAULT_RPM["CH1"]),    # 정상
-    "CH2": make_signal(2.4, 0.4, 2.0, noise=0.2, seed=2, rpm=DEFAULT_RPM["CH2"],
-                       balls=DEFAULT_BALLS["CH2"]),                                  # 베어링 이상 (기준 이하)
-    "CH3": make_signal(16.0, 1.0, 0.0, noise=0.2, seed=3, rpm=DEFAULT_RPM["CH3"]),   # 1X 지배 + 기준 초과
-    "CH4": make_signal(14.0, 9.0, 0.0, noise=0.2, seed=4, rpm=DEFAULT_RPM["CH4"]),   # 1X + 2X + 기준 초과
+    # 정상이지만 계측 저주파 노이즈가 커서 1X/2X가 FFT에서 거의 안 보임 (1X/2X RMS 2 이하, 저주파 80 이상)
+    "CH1": make_signal(2.5, 1.0, 0.0, noise=0.2, seed=5, rpm=DEFAULT_RPM["CH1"], lowf=LOWF_NOISE),
+    "CH2": make_signal(2.0, 0.2, 0.0, noise=0.2, seed=1, rpm=DEFAULT_RPM["CH2"]),    # 정상
+    "CH3": make_signal(2.4, 0.4, 2.0, noise=0.2, seed=2, rpm=DEFAULT_RPM["CH3"],
+                       balls=DEFAULT_BALLS["CH3"]),                                  # 베어링 이상 (기준 이하)
+    "CH4": make_signal(16.0, 1.0, 0.0, noise=0.2, seed=3, rpm=DEFAULT_RPM["CH4"]),   # 1X 지배 + 기준 초과
+    "CH5": make_signal(14.0, 9.0, 0.0, noise=0.2, seed=4, rpm=DEFAULT_RPM["CH5"]),   # 1X + 2X + 기준 초과
 }
 
 
@@ -154,10 +165,15 @@ def peak_near(f, amp, target, tol=0.03):
 ONEX_MIN_RATIO = 0.2   # 입력 회전수의 1X 성분이 최대 피크의 20% 이상이어야 회전수가 맞다고 봄
 
 
+def _main_peak_bin(f, amp):
+    """DC와 저주파 노이즈 영역(LOWF_HZ 미만)을 제외한 최대 피크의 빈 번호"""
+    return int(np.argmax(np.where(f >= LOWF_HZ, amp, 0.0)))
+
+
 def detect_rpm(x):
     """신호의 FFT 최대 피크를 1X로 보고 그에 맞는 회전수(rpm)를 추정 (포물선 보간으로 빈 간격보다 정밀하게)"""
     f, amp = spectrum(x)
-    k = int(np.argmax(amp[1:])) + 1
+    k = _main_peak_bin(f, amp)
     delta = 0.0
     if k < amp.size - 1:
         a, b, c = amp[k - 1], amp[k], amp[k + 1]
@@ -170,10 +186,16 @@ def rpm_mismatch(x, rpm):
     """입력한 회전수의 1X 주파수에 뚜렷한 피크가 없으면 (1X Hz, 최대 피크 Hz)를 반환, 맞으면 None"""
     f, amp = spectrum(x)
     f1 = shaft_hz(rpm)
-    k = int(np.argmax(amp[1:])) + 1   # DC 제외 최대 피크
+    k = _main_peak_bin(f, amp)   # DC/저주파 노이즈 제외 최대 피크
     if peak_near(f, amp, f1) >= ONEX_MIN_RATIO * amp[k]:
         return None
     return f1, float(f[k])
+
+
+def lowfreq_noise_rms(f, amp):
+    """DC 제외, 2Hz 미만 구간의 최대 RMS (mm/s) - 계측 저주파 노이즈(ski-slope) 크기"""
+    m = (f > 0) & (f < 2.0)
+    return float(amp[m].max()) if m.any() else 0.0
 
 
 def analyze_signal(name):
@@ -193,6 +215,7 @@ def analyze_signal(name):
         "shaft_1X_hz": round(f1, 2),
         "bearing_balls": balls,
         "bearing_BPFO_hz": round(fb, 1) if bearing else None,
+        "lowfreq_noise_rms": round(lowfreq_noise_rms(f, amp), 2),   # 2Hz 미만 저주파 노이즈 RMS
         "peak_rms_mm_s": round(float(amp[k]), 2),   # 판정 기준과 비교하는 값 (FFT 최대 피크의 RMS)
         "peak_freq_hz": round(float(f[k]), 1),
         "rms_limit_mm_s": RMS_LIMIT,
@@ -214,8 +237,10 @@ def list_signals():
 
 
 # ---------- 3. 규칙 (프롬프트로도, 오프라인 판정으로도 사용) ----------
-RULES = """판정 규칙:
+RULES = f"""판정 규칙:
 기준 비교 값은 FFT 최대 피크의 RMS(peak_rms_mm_s)이며 overall RMS가 아님.
+0) 2Hz 미만 저주파 노이즈(lowfreq_noise_rms)가 {LOWNOISE_LIMIT:g} mm/s 초과 -> '재계측 권장'
+   (저주파 노이즈가 1X/2X를 가려 정확한 분석이 안 되므로 아래 규칙을 적용하지 않음)
 1) peak_rms가 기준 이하이고 bearing 성분이 1X 대비 0.7 이상 -> '베어링 점검 요망'
    (외륜 주파수 = 회전주파수/2 x 0.8 x 볼 개수. 볼 개수 1은 베어링 주파수 미적용 채널이라 베어링 판정을 하지 않음)
 2) peak_rms가 기준 이하이고 이상 징후 없음 -> '정상'
@@ -224,10 +249,67 @@ RULES = """판정 규칙:
 
 
 def rule_verdict(r):
+    if r.get("lowfreq_noise_rms", 0.0) > LOWNOISE_LIMIT:
+        return "재계측 권장"
     over = r["peak_rms_mm_s"] > r["rms_limit_mm_s"]
     if over:
         return "정렬 요망" if r["ratio_2X_over_1X"] >= 0.5 else "발란싱 요망"
     return "베어링 점검 요망" if r["ratio_bearing_over_1X"] >= 0.7 else "정상"
+
+
+RESULT_BASE = "result"   # 분석 결과 표 파일 이름 (result-1.xlsx, result-2.xlsx ... 그래픽 출력과 별개로 항상 저장)
+RESULT_HEADERS = ("채널", "회전수 (rpm)", "볼 개수", "최대 피크 RMS (mm/s)", f"기준 (≤{RMS_LIMIT})",
+                  "1X RMS", "2X RMS", "BPFO RMS", "결함 진단")
+
+
+def result_row(r, verdict):
+    """analyze_signal 결과와 판정을 result.xlsx의 한 행(RESULT_HEADERS 순서)으로 변환"""
+    if verdict == "재계측 권장":   # 저주파 노이즈: 최대 피크 기준 비교가 무의미
+        ok = "재계측"
+    else:
+        ok = "만족" if r["peak_rms_mm_s"] <= r["rms_limit_mm_s"] else "불만족"
+    brg = r["rms_bearing_BPFO"] if r["bearing_BPFO_hz"] is not None else "-"
+    return [r["channel"], r["rpm"], r["bearing_balls"], r["peak_rms_mm_s"], ok,
+            r["rms_1X"], r["rms_2X"], brg, verdict]
+
+
+def next_result_path(folder="."):
+    """기존 result-N.xlsx와 겹치지 않도록 가장 큰 일련번호 + 1의 경로를 반환 (없으면 result-1.xlsx)"""
+    nums = [int(m.group(1)) for p in Path(folder).glob(f"{RESULT_BASE}-*.xlsx")
+            if (m := re.fullmatch(rf"{RESULT_BASE}-(\d+)\.xlsx", p.name))]
+    return Path(folder) / f"{RESULT_BASE}-{max(nums, default=0) + 1}.xlsx"
+
+
+def write_result_xlsx(results, path=None):
+    """채널별 분석 결과(analyze_signal 반환값의 목록)를 표 1개짜리 엑셀로 저장하고 경로를 반환.
+    path를 안 주면 next_result_path()로 일련번호가 붙은 새 파일에 저장 (이전 결과를 덮어쓰지 않음)"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "분석 결과"
+    ws.append(list(RESULT_HEADERS))
+    for r in results:
+        ws.append(result_row(r, rule_verdict(r)))
+    for c in ws[1]:
+        c.font = Font(bold=True)
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for row in ws.iter_rows(min_row=2):
+        for i, c in enumerate(row):
+            # 채널(1열)과 결함 진단(마지막 열)은 가운데, 나머지는 오른쪽 정렬
+            c.alignment = Alignment(horizontal="center" if i in (0, len(row) - 1) else "right")
+    for col in ws.columns:   # 열 너비: 내용 길이에 맞춤 (한글은 2칸으로 계산)
+        w = max(sum(2 if ord(ch) > 127 else 1 for ch in str(c.value or "")) for c in col)
+        ws.column_dimensions[col[0].column_letter].width = w + 3
+    path = path or next_result_path()
+    wb.save(path)
+    print("분석 결과 저장:", path)
+    return path
+
+
+def save_result(path=None):
+    """현재 SIGNALS 전체를 분석해 결과 파일로 저장"""
+    return write_result_xlsx([analyze_signal(ch) for ch in SIGNALS], path)
 
 
 # ---------- 4. 에이전트 루프 ----------
@@ -313,6 +395,12 @@ def draw_spectrum(ax, x, title, rpm, balls=1):
             ax.annotate(f"{lab}\n{k:.0f} Hz, {pk:.2f}", xy=(k, pk), xytext=(0, 8),
                         textcoords="offset points", ha="center", fontsize=8, color=c)
     ax.set_ylim(0, ymax)
+    low = lowfreq_noise_rms(f, a)
+    if low > LOWNOISE_LIMIT:   # 저주파 노이즈가 커서 1X/2X 분석 불가 -> 그래프에 재계측 권장 표시
+        ax.text(0.5, 0.5, f"[!] 재계측 권장\n2Hz 미만 저주파 노이즈 RMS {low:.0f} mm/s\n"
+                f"→ 1X/2X(허용치 이하)가 가려져 정확한 분석 불가", transform=ax.transAxes,
+                ha="center", va="center", fontsize=9, color="#c0392b", fontweight="bold",
+                bbox=dict(boxstyle="round", fc="#fdecea", ec="#c0392b"))
     ax.set_ylabel("진폭 (mm/s, RMS)")
     ax.legend(loc="upper right", fontsize=8)
 
@@ -322,7 +410,12 @@ def plot_all(path="spectra.png"):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     set_korean_font()
-    fig, axs = plt.subplots(2, 2, figsize=(10, 6))
+    n = len(SIGNALS)
+    cols = min(n, 2)
+    rows = -(-n // cols)
+    fig, axs = plt.subplots(rows, cols, figsize=(10, 3 * rows), squeeze=False)
+    for ax in axs.ravel()[n:]:
+        ax.axis("off")   # 채널 수가 홀수면 남는 칸은 비움
     for ax, (ch, x) in zip(axs.ravel(), SIGNALS.items()):
         draw_spectrum(ax, x, f"{ch} ({RPM[ch]} rpm): {rule_verdict(analyze_signal(ch))}",
                       RPM[ch], BALLS.get(ch, 1))
@@ -624,10 +717,12 @@ class VibeUI:
         lines = []
         for ch, r in results.items():
             ok = r["peak_rms_mm_s"] <= r["rms_limit_mm_s"]
-            tag = "bad" if not ok else ("good" if verdicts[ch] == "정상" else "warn")
+            remeasure = verdicts[ch] == "재계측 권장"   # 저주파 노이즈: 최대 피크 기준 비교가 무의미
+            tag = "warn" if remeasure else ("bad" if not ok else ("good" if verdicts[ch] == "정상" else "warn"))
             applied = r["bearing_BPFO_hz"] is not None   # 볼 개수 2 이상: 베어링 주파수 사용
             self.table.insert("", "end", tags=(tag,), values=(
-                ch, r["rpm"], r["bearing_balls"], r["peak_rms_mm_s"], "만족" if ok else "불만족",
+                ch, r["rpm"], r["bearing_balls"], r["peak_rms_mm_s"],
+                "재계측" if remeasure else ("만족" if ok else "불만족"),
                 r["rms_1X"], r["rms_2X"], r["rms_bearing_BPFO"] if applied else "-", verdicts[ch]))
             bearing = (f"BPFO {r['bearing_BPFO_hz']} Hz, BPFO/1X {r['ratio_bearing_over_1X']}" if applied
                        else "베어링 주파수 미사용(볼 1개)")
@@ -635,6 +730,10 @@ class VibeUI:
                          f"(최대 피크 RMS {r['peak_rms_mm_s']} @ {r['peak_freq_hz']} Hz / 기준 {r['rms_limit_mm_s']}, "
                          f"2X/1X {r['ratio_2X_over_1X']}, {bearing})")
         self.summary = "[규칙 기반 판정]\n" + "\n".join(lines)
+        try:
+            self.summary += f"\n\n결과 파일 저장: {write_result_xlsx(list(results.values()))}"
+        except OSError as e:   # 엑셀이 열려 있는 등 저장 실패: 화면 결과는 그대로 표시
+            self.summary += f"\n\n결과 파일 저장 실패: {e}"
         self.nb.select(self.res_frame)
 
         if self.use_agent:
@@ -675,7 +774,7 @@ class VibeUI:
 
 
 CHANNEL_RANGE = 32   # 안내 문구에 표시하는 채널 범위 (1~32)
-MAX_CHANNELS = 4     # 지금은 가상 데이터(CH1~CH4) 4채널까지만 지원
+MAX_CHANNELS = 5     # 지금은 가상 데이터(CH1~CH5) 5채널까지만 지원
 
 
 def ask_channel_count(root):
@@ -727,3 +826,4 @@ if __name__ == "__main__":
         run_offline()
     else:
         print(run_agent())
+    save_result()   # 그래픽(--plot)과 별개로 채널별 결과 표 파일 저장
