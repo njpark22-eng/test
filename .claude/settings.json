@@ -13,7 +13,11 @@
       "Edit(**/*.xlsm)",
       "Write(**/*.xlsm)",
       "Edit(**/*.xls)",
-      "Write(**/*.xls)"
+      "Write(**/*.xls)",
+      "Bash(printenv:*)",
+      "Bash(env:*)",
+      "Bash(rm result-*:*)",
+      "Bash(mv result-*:*)"
     ]
   },
   "hooks": {
@@ -24,6 +28,10 @@
           {
             "type": "command",
             "command": "uv run pytest -q"
+          },
+          {
+            "type": "command",
+            "command": "python .claude/hooks/check_rules_sync.py"
           }
         ]
       }
@@ -35,6 +43,10 @@
           {
             "type": "command",
             "command": "python .claude/hooks/block_input_excel.py"
+          },
+          {
+            "type": "command",
+            "command": "python .claude/hooks/guard_demo.py"
           }
         ]
       }

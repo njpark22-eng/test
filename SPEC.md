@@ -72,5 +72,9 @@
 
 ### 보안/운영
 - 입력 엑셀 수정 차단: `.claude/settings.json`의 deny 규칙(`data/**`, `*.xlsx` Edit/Write)과 PreToolUse 훅(`.claude/hooks/block_input_excel.py`)이 엑셀 수정·삭제·덮어쓰기를 막는다. `--make-data`와 `result-N.xlsx` 생성은 예외.
+- API 키 노출 차단: PreToolUse 훅 `.claude/hooks/guard_demo.py`가 키 값을 출력하는 Bash 명령(echo/printenv/env 덤프 등)과 키 리터럴(`sk-ant-...`)이 든 명령·파일 쓰기를 막는다. deny 규칙에도 `printenv`, `env`를 넣었다.
+- 결과 파일 덮어쓰기 차단: `guard_demo.py`가 기존 `result-N.xlsx/png`의 Edit/Write와 rm/mv/덮어쓰기 명령을 막는다. 결과는 프로그램이 새 번호로만 만든다.
+- 판정 규칙 동기화 검사: PostToolUse 훅 `.claude/hooks/check_rules_sync.py`가 `vibe_agent.py`/tests 수정 후 (1) `rule_verdict`와 `RULES`의 숫자 일치, (2) 기준값(RMS 4.5, 저주파 20, 2X/1X 0.5, 베어링/1X 0.7)이 tests/에 있는지, (3) HEAD 대비 한쪽만 수정되지 않았는지, (4) 기준값 변경 시 tests/도 바뀌었는지를 검사해 어긋나면 알린다.
+- 훅 동작은 `tests/test_hooks.py`로 검증한다.
 - API 키, `.env`는 읽거나 커밋하지 않는다.
 - 코드 수정 후에는 항상 `uv run pytest`를 실행한다.

@@ -17,7 +17,9 @@
 - 시연 데이터는 가상 신호만 사용한다. 실제 계측 데이터, 개인정보 금지.
 - 입력 데이터 엑셀(`data/*.xlsx` 등)은 계측기 원본으로 간주하므로 수정·덮어쓰기 금지 (읽기 전용으로만 연다). 예외는 가상 데이터를 새로 만드는 `--make-data`뿐.
   `.claude/settings.json`의 deny 규칙과 PreToolUse 훅(`.claude/hooks/block_input_excel.py`)이 엑셀·`data/` 수정을 차단한다.
-- API 키, .env는 읽거나 커밋하지 않는다.
+- API 키, .env는 읽거나 커밋하지 않는다. 키 값을 출력하는 명령(echo, printenv, env 등)은 `.claude/hooks/guard_demo.py`가 차단한다.
+- 결과 파일 `result-N.xlsx/png`는 새 번호로만 저장하고 기존 파일을 덮어쓰거나 지우지 않는다 (`guard_demo.py`가 차단).
+- `.claude/hooks/check_rules_sync.py`(PostToolUse)가 `rule_verdict`와 `RULES` 숫자 일치, 기준값 변경 시 tests/ 동시 수정 여부를 검사한다. 훅 동작 테스트는 `tests/test_hooks.py`.
 - 코드 수정 후에는 항상 pytest를 돌린다.
 
 ## 에이전트
