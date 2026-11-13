@@ -29,11 +29,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run pytest -q"
+            "command": "uv run --directory C:/work/vibe-agent pytest -q"
           },
           {
             "type": "command",
-            "command": "python .claude/hooks/check_rules_sync.py"
+            "command": "python C:/work/vibe-agent/.claude/hooks/check_rules_sync.py"
           }
         ]
       }
@@ -44,11 +44,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/block_input_excel.py"
+            "command": "python C:/work/vibe-agent/.claude/hooks/block_input_excel.py"
           },
           {
             "type": "command",
-            "command": "python .claude/hooks/guard_demo.py"
+            "command": "python C:/work/vibe-agent/.claude/hooks/guard_demo.py"
           }
         ]
       }

@@ -131,6 +131,14 @@ uv run python vibe_agent.py --ui --offline
 
 `tkinter`가 없으면 UI를 쓸 수 없습니다. Windows/macOS의 일반 Python에는 포함되어 있고, Linux에서는 `sudo apt install python3-tk`로 설치합니다.
 
+### 웹 데모 (읽기 전용)
+
+```
+uv run uvicorn api.index:app
+```
+
+브라우저에서 `http://127.0.0.1:8000/`을 열면 가상 데이터 5채널의 판정 표와 FFT 그래프가 보입니다. 규칙 기반 판정만 쓰고 API 키는 필요 없으며, 계측 파일을 올리거나 고치는 기능은 없습니다. Vercel에 배포하며 진입점은 `api/index.py`입니다. 배포 주소: (배포 후 기입)
+
 ## 5. 데이터 형식
 
 - 엑셀 파일 1개 = 채널 1개입니다. (`data/CH1.xlsx` = CH1)

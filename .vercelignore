@@ -1,0 +1,13 @@
+.venv/
+tests/
+.claude/
+.specify/
+specs/
+*.pptx
+~$*
+result-*
+review-*
+.pytest_cache/
+__pycache__/
+.env
+.env.*

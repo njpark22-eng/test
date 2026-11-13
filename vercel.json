@@ -1,0 +1,9 @@
+{
+  "regions": ["icn1"],
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "{vibe_agent.py,data/*.xlsx,api/page.html}",
+      "excludeFiles": "{tests/**,.claude/**,.specify/**,specs/**,*.pptx,result-*,review-*,.pytest_cache/**,__pycache__/**}"
+    }
+  }
+}

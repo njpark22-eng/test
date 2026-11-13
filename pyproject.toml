@@ -4,13 +4,14 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
-    "anthropic",
-    "matplotlib",
     "openpyxl>=3.1.5",
+    "fastapi",
 ]
 
+# uv run은 dev 그룹을 기본 설치한다. CLI/UI/에이전트용 anthropic, matplotlib은 여기에 두어
+# Vercel 웹 번들(dependencies만 설치)에서 제외한다.
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "httpx", "uvicorn", "anthropic", "matplotlib"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
