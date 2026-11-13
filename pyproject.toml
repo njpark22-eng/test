@@ -6,6 +6,8 @@ dependencies = [
     "numpy",
     "openpyxl>=3.1.5",
     "fastapi",
+    "psycopg[binary]>=3.3.9",
+    "python-multipart>=0.0.32",
 ]
 
 # uv run은 dev 그룹을 기본 설치한다. CLI/UI/에이전트용 anthropic, matplotlib은 여기에 두어

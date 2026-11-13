@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계측 데이터 올리기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/assets/shared.css">
+</head>
+<body>
+<main>
+  <h1>계측 데이터 올리기</h1>
+  <div id="menu"></div>
+  <p class="notice" role="note">가상 데이터만 올리세요. 실제 계측 데이터는 금지입니다.</p>
+
+  <label class="field" for="token">쓰기 토큰</label>
+  <input id="token" type="password" autocomplete="off" aria-describedby="tokenHelp">
+  <p class="note" id="tokenHelp">토큰은 이 탭에만 보관되고 탭을 닫으면 지워집니다.</p>
+
+  <label class="field" for="count">채널 수 (1~5)</label>
+  <select id="count"></select>
+
+  <div id="rows"></div>
+  <p class="note">엑셀은 A열 time_s, B열 velocity_mm_s, 샘플링 주파수 5,120 Hz여야 합니다. 파일을 고르면 회전수가 자동으로 채워집니다. 볼 개수 1은 베어링을 쓰지 않는 장비입니다.</p>
+
+  <p><button class="primary" id="run" type="button" disabled>분석 실행</button></p>
+  <p class="error" id="error" role="alert"></p>
+</main>
+
+<script src="/assets/shared.js"></script>
+<script>
+document.getElementById("menu").innerHTML = nav("/upload");
+
+const $ = id => document.getElementById(id);
+const tokenInput = $("token");
+const state = { cfg: null, files: [], rpm: [], balls: [] };
+
+try { tokenInput.value = sessionStorage.getItem("wt") || ""; } catch (_) {}
+tokenInput.addEventListener("input", () => {
+  try { sessionStorage.setItem("wt", tokenInput.value); } catch (_) {}
+});
+
+function showError(msg) { $("error").textContent = msg || ""; }
+
+function headers() { return { "X-Write-Token": tokenInput.value }; }
+
+async function readError(res) {
+  try { return (await res.json()).error || "요청에 실패했습니다"; } catch (_) { return "요청에 실패했습니다"; }
+}
+
+function renderRows() {
+  const n = Number($("count").value);
+  state.files = new Array(n).fill(null);
+  state.rpm = new Array(n).fill("");
+  state.balls = new Array(n).fill("1");
+  $("rows").innerHTML = Array.from({ length: n }, (_, i) => `
+    <div class="row" data-i="${i}">
+      <span class="rowname">CH${i + 1}</span>
+      <input type="file" accept=".xlsx" aria-label="CH${i + 1} 엑셀 파일">
+      <input type="number" min="1" max="20000" step="1" placeholder="rpm" aria-label="CH${i + 1} 회전수 (rpm)">
+      <input type="number" min="1" max="100" step="1" value="1" aria-label="CH${i + 1} 볼 개수">
+      <span class="status">파일을 고르세요</span>
+    </div>`).join("");
+  document.querySelectorAll(".row").forEach(row => {
+    const i = Number(row.dataset.i);
+    const [file, rpm, balls] = row.querySelectorAll("input");
+    file.addEventListener("change", () => inspect(i, row, file.files[0], rpm));
+    rpm.addEventListener("input", () => { state.rpm[i] = rpm.value; refresh(); });
+    balls.addEventListener("input", () => { state.balls[i] = balls.value; });
+  });
+  refresh();
+}
+
+async function inspect(i, row, file, rpmInput) {
+  const status = row.querySelector(".status");
+  state.files[i] = null;
+  row.querySelector("details")?.remove();
+  showError("");
+  if (!file) { status.textContent = "파일을 고르세요"; refresh(); return; }
+  status.textContent = "확인 중";
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res = await fetch("/api/inspect", { method: "POST", headers: headers(), body: fd });
+    if (!res.ok) { status.textContent = await readError(res); refresh(); return; }
+    const d = await res.json();
+    state.files[i] = file;
+    rpmInput.value = d.rpm_detected;
+    state.rpm[i] = String(d.rpm_detected);
+    status.textContent = `${d.samples.toLocaleString("ko-KR")}개 샘플 · 자동 추정 회전수 ${d.rpm_detected} rpm`;
+    const rows = d.preview.map(([t, v]) => `<tr><td class="num">${t.toFixed(5)}</td><td class="num">${v.toFixed(4)}</td></tr>`).join("");
+    row.insertAdjacentHTML("beforeend",
+      `<details><summary>데이터 앞 ${d.preview.length}행</summary><table><thead><tr><th class="num">time_s</th><th class="num">velocity_mm_s</th></tr></thead><tbody>${rows}</tbody></table></details>`);
+  } catch (_) {
+    status.textContent = "서버에 연결하지 못했습니다. 잠시 뒤 다시 시도하세요";
+  }
+  refresh();
+}
+
+function refresh() {
+  const ready = state.files.every(Boolean) && state.rpm.every(v => v !== "");
+  $("run").disabled = !ready;
+}
+
+$("run").addEventListener("click", async () => {
+  showError("");
+  $("run").disabled = true;
+  const fd = new FormData();
+  state.files.forEach(f => fd.append("files", f));
+  state.rpm.forEach(v => fd.append("rpm", v));
+  state.balls.forEach(v => fd.append("balls", v));
+  try {
+    const res = await fetch("/api/runs", { method: "POST", headers: headers(), body: fd });
+    if (!res.ok) { showError(await readError(res)); refresh(); return; }
+    const run = await res.json();
+    location.href = `/runs/${run.id}`;
+  } catch (_) {
+    showError("서버에 연결하지 못했습니다. 잠시 뒤 다시 시도하세요");
+    refresh();
+  }
+});
+
+$("count").addEventListener("change", renderRows);
+$("count").innerHTML = [1, 2, 3, 4, 5].map(n => `<option value="${n}"${n === 5 ? " selected" : ""}>${n}</option>`).join("");
+renderRows();
+
+fetch("/api/config").then(r => r.json()).then(cfg => {
+  state.cfg = cfg;
+  if (!cfg.write_enabled) showError("서버에 쓰기 토큰이 설정되지 않아 올릴 수 없습니다. 관리자가 WRITE_TOKEN을 설정해야 합니다");
+}).catch(() => {});
+</script>
+</body>
+</html>

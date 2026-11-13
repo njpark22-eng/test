@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>분석 이력</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/assets/shared.css">
+</head>
+<body>
+<main>
+  <h1>분석 이력</h1>
+  <p class="note">가상 데이터, 규칙 기반 판정</p>
+  <div id="menu"></div>
+  <div id="out" class="state loading">불러오는 중</div>
+</main>
+
+<script src="/assets/shared.js"></script>
+<script>
+document.getElementById("menu").innerHTML = nav("/runs");
+
+const out = document.getElementById("out");
+const when = iso => new Date(iso).toLocaleString("ko-KR");
+
+async function getJson(url) {
+  const res = await fetch(url);
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "불러오지 못했습니다");
+  return body;
+}
+
+function showError(e) {
+  out.className = "state error";
+  out.textContent = `불러오지 못했습니다. ${e.message}`;
+}
+
+async function showList() {
+  const { runs } = await getJson("/api/runs");
+  out.className = "";
+  if (!runs.length) {
+    out.innerHTML = `<p class="state">저장된 분석이 없습니다. <a href="/upload">올리기</a>에서 가상 계측 엑셀을 올려 분석하세요.</p>`;
+    return;
+  }
+  const rows = runs.map(r => `<tr>
+      <td class="num" data-label="번호"><a href="/runs/${esc(r.id)}">#${esc(r.id)}</a></td>
+      <td class="nw" data-label="실행 시각">${when(r.created_at)}</td>
+      <td class="num" data-label="채널 수">${esc(r.channel_count)}</td>
+      <td data-label="판정">${r.verdicts.map(v => `<span class="vp">${esc(v.channel)} ${badge(v.verdict)}</span>`).join("")}</td>
+    </tr>`).join("");
+  out.innerHTML = `<table class="cards"><thead><tr><th class="num">번호</th><th class="nw">실행 시각</th><th class="num">채널 수</th><th>판정</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function showRun(id) {
+  const run = await getJson(`/api/runs/${id}`);
+  const t = run.thresholds;
+  out.className = "";
+  out.innerHTML = `<p><a href="/runs">&larr; 이력 목록</a></p>
+    <h2>분석 #${esc(run.id)} · ${esc(when(run.created_at))}</h2>
+    <p class="note">판정에 쓴 기준값: 최대 피크 RMS ${esc(t.rms_limit)} mm/s, 2X/1X ${esc(t.ratio_2x_over_1x)}, 베어링/1X ${esc(t.ratio_bearing_over_1x)}, 2 Hz 미만 저주파 노이즈 ${esc(t.lowfreq_noise_limit)} mm/s. 저장 당시 값이며 다시 계산하지 않았습니다.</p>
+    <h2>판정 결과</h2>${table(run.channels)}
+    <h2>FFT 스펙트럼</h2>${run.channels.map(card).join("")}`;
+}
+
+const m = location.pathname.match(/^\/runs\/(\d+)$/);
+(m ? showRun(m[1]) : showList()).catch(showError);
+</script>
+</body>
+</html>

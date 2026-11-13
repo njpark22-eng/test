@@ -71,7 +71,7 @@ def test_spectrum_arrays_and_bpfo(client):
 # ---------- 화면의 판정 이름이 rule_verdict와 어긋나지 않는지 ----------
 def test_page_knows_every_verdict_name():
     """page.html의 판정 색 분류가 쓰는 판정 문자열이 rule_verdict 반환값과 같아야 한다"""
-    page = (va.Path(__file__).resolve().parent.parent / "api" / "page.html").read_text(encoding="utf-8")
+    page = (va.Path(__file__).resolve().parent.parent / "api" / "shared.js").read_text(encoding="utf-8")
     for name in ("정상", "재계측 권장", "베어링 점검 요망"):   # 초록/주황으로 따로 분류하는 판정
         assert f'"{name}"' in page
     # 나머지(발란싱 요망, 정렬 요망)는 빨강 기본값이므로 판정 이름 집합이 5개로 유지되는지 확인
