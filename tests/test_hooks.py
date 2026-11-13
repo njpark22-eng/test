@@ -122,3 +122,31 @@ def test_current_repo_values_match_rules():
     tests_text = (ROOT / "tests" / "test_vibe_agent.py").read_text(encoding="utf-8")
     assert sync.check(src, tests_text) == []
     assert re.search(r"RULES", src)
+
+
+# ---------- 사람 검수 승인 파일 (review-N.json) ----------
+@pytest.mark.parametrize("cmd", [
+    "python approve.py result-3",
+    "uv run python approve.py result-3",
+    "echo '{}' > review-3.json",
+    "rm review-1.json",
+    "mv review-1.json x.json",
+    "cp fake.json review-4.json",
+])
+def test_review_forgery_commands_blocked(cmd):
+    assert guard.evaluate("Bash", {"command": cmd})
+
+
+@pytest.mark.parametrize("cmd", [
+    "python approve.py result-3 --check",
+    "cat review-1.json",
+    "git commit -m 'approve 반영'",
+    "git add approve.py tests/test_approve.py",
+])
+def test_review_read_commands_allowed(cmd):
+    assert guard.evaluate("Bash", {"command": cmd}) is None
+
+
+def test_review_file_write_blocked():
+    assert guard.evaluate("Write", {"file_path": "review-3.json", "content": "{}"})
+    assert guard.evaluate("Edit", {"file_path": "review-1.json", "new_string": "x"})

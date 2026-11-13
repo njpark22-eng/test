@@ -20,6 +20,11 @@ WRITE_CMD = re.compile(r"(\brm\b|\bmv\b|\btouch\b|\btruncate\b|\bsed\s+-i|\bdel\
                        r"Set-Content|Out-File|(?<![<-])>{1,2}(?!&))", re.I)
 CP_TO_RESULT = re.compile(r"\bcp\b[^;&|]*\s\S*result-\d+\.(xlsx|png)\s*($|[;&|])", re.I)
 
+# 사람 검수 승인 파일: 사람이 approve.py로만 만든다 (에이전트 실행/작성 차단)
+REVIEW = re.compile(r"review-\d+\.json", re.I)
+CP_TO_REVIEW = re.compile(r"\bcp\b[^;&|]*\s\S*review-\d+\.json\s*($|[;&|])", re.I)
+APPROVE_RUN = re.compile(r"\b(python[\d.]*(\.exe)?|py|uv\s+run(\s+python)?)\s+(\S*[/\\])?approve\.py", re.I)
+
 
 def _strip_devnull(cmd):
     return re.sub(r"\d*>\s*(/dev/null|&\d)", "", cmd)
@@ -37,9 +42,15 @@ def evaluate(tool, inp):
             return "API 키 값을 출력하는 명령 (화면 공유 중 키 노출 방지)"
         if RESULT.search(cmd) and (WRITE_CMD.search(RESULT.sub("", cmd)) or CP_TO_RESULT.search(cmd)):
             return "결과 파일(result-N)을 삭제/이동/덮어쓰는 명령 (결과는 새 번호로만 저장)"
+        if APPROVE_RUN.search(cmd) and "--check" not in cmd:
+            return "approve.py는 사람이 직접 실행 (Claude Code에서는 `! python approve.py result-N`)"
+        if REVIEW.search(cmd) and (WRITE_CMD.search(REVIEW.sub("", cmd)) or CP_TO_REVIEW.search(cmd)):
+            return "승인 파일(review-N.json)은 사람만 만들 수 있음 (수정/삭제/이동 금지)"
     elif tool in ("Edit", "Write", "NotebookEdit"):
         path = inp.get("file_path") or inp.get("notebook_path") or ""
         body = " ".join(str(inp.get(k, "")) for k in ("content", "new_string", "new_source"))
+        if REVIEW.search(os.path.basename(path)):
+            return "승인 파일(review-N.json)은 사람만 만들 수 있음 (에이전트가 쓰기 금지)"
         if KEY_LITERAL.search(body):
             return "파일에 API 키 값을 쓰려는 시도 (커밋 방지)"
         if RESULT.search(os.path.basename(path)) and os.path.exists(path):

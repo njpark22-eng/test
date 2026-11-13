@@ -17,7 +17,9 @@
       "Bash(printenv:*)",
       "Bash(env:*)",
       "Bash(rm result-*:*)",
-      "Bash(mv result-*:*)"
+      "Bash(mv result-*:*)",
+      "Write(./review-*.json)",
+      "Edit(./review-*.json)"
     ]
   },
   "hooks": {
