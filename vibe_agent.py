@@ -307,9 +307,28 @@ def write_result_xlsx(results, path=None):
     return path
 
 
-def save_result(path=None):
-    """현재 SIGNALS 전체를 분석해 결과 파일로 저장"""
-    return write_result_xlsx([analyze_signal(ch) for ch in SIGNALS], path)
+def verdict_line(r, verdict):
+    """채널 1개의 판정 설명 한 줄 (UI 결과 텍스트와 그림 파일의 description에 공통 사용)"""
+    applied = r["bearing_BPFO_hz"] is not None   # 볼 개수 2 이상: 베어링 주파수 사용
+    bearing = (f"BPFO {r['bearing_BPFO_hz']} Hz, BPFO/1X {r['ratio_bearing_over_1X']}" if applied
+               else "베어링 주파수 미사용(볼 1개)")
+    return (f"{r['channel']} [{r['rpm']} rpm, 1X {r['shaft_1X_hz']} Hz]: {verdict}  "
+            f"(최대 피크 RMS {r['peak_rms_mm_s']} @ {r['peak_freq_hz']} Hz / 기준 {r['rms_limit_mm_s']}, "
+            f"2X/1X {r['ratio_2X_over_1X']}, {bearing})")
+
+
+def save_result(path=None, agent_text=None):
+    """현재 SIGNALS 전체를 분석해 결과 엑셀과, 같은 일련번호의 그림 파일(FFT 그래프 + 설명)로 저장.
+    agent_text가 있으면 Claude 에이전트 진단을 설명에 덧붙임. 엑셀 경로를 반환"""
+    results = [analyze_signal(ch) for ch in SIGNALS]
+    verdicts = {r["channel"]: rule_verdict(r) for r in results}
+    xlsx = write_result_xlsx(results, path)
+    desc = "[규칙 기반 판정]\n" + "\n".join(verdict_line(r, verdicts[r["channel"]]) for r in results)
+    if agent_text:
+        desc += "\n\n[Claude 에이전트 진단]\n" + agent_text
+    img = save_result_image(Path(xlsx).with_suffix(".png"), list(SIGNALS), verdicts, desc)
+    print("그림 저장:", img)
+    return xlsx
 
 
 # ---------- 4. 에이전트 루프 ----------
@@ -423,6 +442,33 @@ def plot_all(path="spectra.png"):
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     print("스펙트럼 저장:", path)
+
+
+def save_result_image(path, chs, verdicts, description):
+    """채널별 FFT 그래프(위) + 판정 설명(description, 아래)을 그림 파일 1장으로 저장하고 경로를 반환.
+    화면(Tk)과 별개의 Figure를 쓰므로 UI 상태에 영향이 없음. 그래프는 현재 SIGNALS/RPM/BALLS 기준"""
+    import textwrap
+    from matplotlib.figure import Figure
+    set_korean_font()
+    n = len(chs)
+    cols = min(n, 2)
+    rows = -(-n // cols)
+    wrapped = []
+    for para in description.splitlines():
+        wrapped += textwrap.wrap(para, width=80) or [""]   # 긴 줄은 그림 폭에 맞춰 줄바꿈
+    plot_h, text_h = 3 * rows, 0.2 * len(wrapped) + 0.5
+    fig = Figure(figsize=(10, plot_h + text_h))
+    gs = fig.add_gridspec(rows + 1, cols, height_ratios=[plot_h / rows] * rows + [text_h])
+    for i, ch in enumerate(chs):
+        draw_spectrum(fig.add_subplot(gs[i // cols, i % cols]), SIGNALS[ch],
+                      f"{ch} ({RPM[ch]} rpm): {verdicts[ch]}", RPM[ch], BALLS.get(ch, 1))
+    ax = fig.add_subplot(gs[rows, :])
+    ax.axis("off")
+    ax.text(0, 1, "\n".join(wrapped), va="top", ha="left", fontsize=8)
+    fig.supxlabel(XLABEL, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    return path
 
 
 # ---------- 5. UI (tkinter): 채널 수 입력 -> 파일 선택/표시 -> 분석 실행 ----------
@@ -724,16 +770,15 @@ class VibeUI:
                 ch, r["rpm"], r["bearing_balls"], r["peak_rms_mm_s"],
                 "재계측" if remeasure else ("만족" if ok else "불만족"),
                 r["rms_1X"], r["rms_2X"], r["rms_bearing_BPFO"] if applied else "-", verdicts[ch]))
-            bearing = (f"BPFO {r['bearing_BPFO_hz']} Hz, BPFO/1X {r['ratio_bearing_over_1X']}" if applied
-                       else "베어링 주파수 미사용(볼 1개)")
-            lines.append(f"{ch} [{r['rpm']} rpm, 1X {r['shaft_1X_hz']} Hz]: {verdicts[ch]}  "
-                         f"(최대 피크 RMS {r['peak_rms_mm_s']} @ {r['peak_freq_hz']} Hz / 기준 {r['rms_limit_mm_s']}, "
-                         f"2X/1X {r['ratio_2X_over_1X']}, {bearing})")
+            lines.append(verdict_line(r, verdicts[ch]))
         self.summary = "[규칙 기반 판정]\n" + "\n".join(lines)
+        self.img_path = next_result_path().with_suffix(".png")   # result-N.xlsx와 같은 일련번호
+        self.verdicts = verdicts
         try:
             self.summary += f"\n\n결과 파일 저장: {write_result_xlsx(list(results.values()))}"
         except OSError as e:   # 엑셀이 열려 있는 등 저장 실패: 화면 결과는 그대로 표시
             self.summary += f"\n\n결과 파일 저장 실패: {e}"
+        self._save_image(self.summary)
         self.nb.select(self.res_frame)
 
         if self.use_agent:
@@ -746,6 +791,14 @@ class VibeUI:
         else:
             self._set_text(self.summary)
             self.status.set("분석 완료")
+
+    def _save_image(self, description):
+        """FFT 그래프 + 설명 그림 파일 저장 (같은 경로에 다시 저장하면 덮어씀). 실패해도 화면 결과는 유지"""
+        try:
+            save_result_image(self.img_path, self.chs, self.verdicts, description)
+            self.status.set(f"그림 저장: {self.img_path}")
+        except OSError as e:
+            self.status.set(f"그림 저장 실패: {e}")
 
     def _agent_worker(self):
         try:
@@ -763,6 +816,7 @@ class VibeUI:
                     continue
                 if kind == "done":
                     self._set_text(self.summary + "\n\n[Claude 에이전트 진단]\n" + msg)
+                    self._save_image(self.summary + "\n\n[Claude 에이전트 진단]\n" + msg)   # 진단 설명까지 그림에 반영
                 else:
                     self._set_text(self.summary + f"\n\n[에이전트 호출 실패 - 규칙 기반 결과만 표시]\n{msg}")
                 self.status.set("분석 완료")
@@ -822,8 +876,10 @@ if __name__ == "__main__":
         sys.exit("계측 데이터 없음: `uv run python vibe_agent.py --make-data` 먼저 실행")
     if "--plot" in sys.argv:
         plot_all()
+    agent_text = None
     if "--offline" in sys.argv or not os.getenv("ANTHROPIC_API_KEY"):
         run_offline()
     else:
-        print(run_agent())
-    save_result()   # 그래픽(--plot)과 별개로 채널별 결과 표 파일 저장
+        agent_text = run_agent()
+        print(agent_text)
+    save_result(agent_text=agent_text)   # 그래픽(--plot)과 별개로 결과 표(xlsx)와 그림(png) 저장

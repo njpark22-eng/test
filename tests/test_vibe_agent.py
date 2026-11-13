@@ -209,3 +209,18 @@ def test_spectrum_is_rms_not_peak():
 
 def test_misalignment_has_high_2x():
     assert analyze_signal("CH5")["ratio_2X_over_1X"] >= 0.5
+
+
+def test_result_image_saved(tmp_path):
+    from vibe_agent import save_result_image
+    chs = list(SIGNALS)
+    verdicts = {ch: rule_verdict(analyze_signal(ch)) for ch in chs}
+    path = save_result_image(tmp_path / "result-1.png", chs, verdicts, "[규칙 기반 판정]\n" + "설명 " * 100)
+    assert path.exists() and path.stat().st_size > 10_000
+
+
+def test_save_result_writes_xlsx_and_png(tmp_path, monkeypatch):
+    from vibe_agent import save_result
+    monkeypatch.chdir(tmp_path)
+    xlsx = save_result()
+    assert xlsx.exists() and xlsx.with_suffix(".png").exists()   # 같은 일련번호로 그림도 저장
