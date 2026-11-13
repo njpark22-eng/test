@@ -7,7 +7,7 @@ import hashlib
 import threading
 from datetime import datetime, timedelta, timezone
 
-from api.errors import ApiError
+from vibe_web.errors import ApiError
 
 APPEND_ONLY_TABLES = ("measurement_files", "analysis_runs", "channel_results")
 

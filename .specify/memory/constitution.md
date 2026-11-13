@@ -29,7 +29,7 @@
 
 ## Web Demo Standards
 
-- 프레임워크: FastAPI + 정적 HTML/바닐라 JS, 빌드 단계 없음. 진입점 `api/index.py`의 `app`. 저장소의 `data/`는 읽기 전용이고, 올린 가상 원본과 결과는 Neon에 추가만 가능하게 저장한다(002).
+- 프레임워크: FastAPI + 정적 HTML/바닐라 JS, 빌드 단계 없음. 진입점 `api/index.py`(한 줄, 앱은 `vibe_web/`). 저장소의 `data/`는 읽기 전용이고, 올린 가상 원본과 결과는 Neon에 추가만 가능하게 저장한다(002).
 - 배포: Vercel. `.python-version` 고정, 웹 의존성은 `numpy`, `openpyxl`, `fastapi`로 제한(`anthropic`, `matplotlib` 제외), `vercel.json`(리전 `icn1`, 번들은 `vibe_agent.py`와 `data/*.xlsx`), `.vercelignore`로 발표자료·검수 파일·`.venv`·`tests`·`.claude` 제외. 의존성을 바꾸면 `uv.lock`도 갱신한다.
 - 폰트: Noto Sans KR(400/500/700, `font-display: swap`), 가능하면 woff2 직접 서빙. 폰트 로딩이 실패해도 레이아웃이 무너지지 않아야 한다.
 - 디자인 스킬: 기본은 `frontend-design`과 `dataviz`. 템플릿 느낌이 남으면 `hallmark` 또는 `taste-skill` 중 하나만 추가한다. 외부 스킬 설치는 사용자 확인 후 SKILL.md를 읽고 하며, 설치하면 출처와 버전을 `CLAUDE.md`에 적는다. 같은 역할의 스킬을 겹쳐 쓰지 않는다.

@@ -54,7 +54,13 @@
 - **결정**: 올리기(`/upload`), 이력 목록(`/runs`), 상세(`/runs/{id}`, 같은 HTML)를 추가하고 기존 `/`(판정 화면)는 유지한다. 공통 CSS·JS를 `api/shared.css`, `api/shared.js`로 빼서 중복을 없앤다.
 - **근거**: 색 토큰과 스펙트럼 그리기를 한 곳에서 관리해야 디자인 규칙이 어긋나지 않는다.
 
-## 10. 해결하지 못한 항목
+## 10. Vercel의 `api/` 폴더 규칙 (배포 실패로 확인)
+
+- **문제**: 첫 배포가 `[conflicting_file_path] ... "api/shared.js" has conflicts with "api/shared.css"`로 실패했다. Vercel은 `api/` 아래의 모든 파일을 함수 경로로 취급하며, 확장자를 뺀 이름이 같으면 충돌한다. `api/`의 보조 `.py` 모듈과 HTML도 같은 위험이 있다.
+- **결정**: `api/index.py`는 진입점 한 줄(`from vibe_web.main import app`)만 두고, 앱 코드와 화면 파일은 `vibe_web/` 패키지(`static/` 포함)로 옮긴다. `vercel.json`의 `includeFiles`는 `vibe_web/**`를 포함한다.
+- **교훈**: 계획 단계에서 Vercel의 폴더 규칙을 확인하지 않았다. 앞으로 `api/`에는 진입점 외 파일을 두지 않는다(CLAUDE.md에 규칙으로 남겼다).
+
+## 11. 해결하지 못한 항목
 
 - 실제 Neon 접속 검증: 이 환경에 연결 정보가 없다. 배포 환경에서 `/api/runs`로 확인한다.
 - Vercel 요청 크기 제한과 실행 시간 제한의 정확한 값: 플랜별로 다르다. 배포 후 확인한다.

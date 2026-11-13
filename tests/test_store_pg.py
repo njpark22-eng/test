@@ -5,8 +5,8 @@ import uuid
 
 import pytest
 
-from api import analysis
-from api.store import PgStore
+from vibe_web import analysis
+from vibe_web.store import PgStore
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="TEST_DATABASE_URL이 없어 실제 DB 테스트를 건너뜁니다")

@@ -61,15 +61,19 @@ specs/002-persistence/
 
 ```text
 api/
-├── index.py             # 앱과 라우트 (001 확장)
+└── index.py             # Vercel 진입점 한 줄 (이 폴더에는 다른 파일을 두지 않는다. research.md 10번)
+vibe_web/
+├── main.py              # 앱과 라우트 (001 확장)
 ├── analysis.py          # vibe_agent 호출을 잠금 아래에서 감싸는 분석 함수
 ├── store.py             # 저장소: PgStore, MemoryStore, 스키마 SQL
 ├── auth.py              # 쓰기 토큰 검사
-├── page.html            # 001 판정 화면 (공통 파일 사용으로 정리)
-├── upload.html          # 올리기 화면
-├── runs.html            # 이력 목록·상세 화면
-├── shared.css           # 공통 스타일(색 토큰, 배지, 카드)
-└── shared.js            # 공통 스크립트(배지, 스펙트럼 SVG)
+├── errors.py            # API 오류
+└── static/
+    ├── page.html        # 001 판정 화면 (공통 파일 사용으로 정리)
+    ├── upload.html      # 올리기 화면
+    ├── runs.html        # 이력 목록·상세 화면
+    ├── shared.css       # 공통 스타일(색 토큰, 배지, 카드)
+    └── shared.js        # 공통 스크립트(배지, 스펙트럼 SVG)
 tests/
 ├── test_web.py          # 001 (기존)
 ├── test_persistence.py  # 002: 업로드, 검증, 저장, 이력, 토큰, 읽기 전용

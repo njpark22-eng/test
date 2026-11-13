@@ -8,10 +8,10 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
 import vibe_agent as va
-from api import analysis
-from api.errors import ApiError
-from api.index import app, get_store
-from api.store import MemoryStore, PgStore
+from vibe_web import analysis
+from vibe_web.errors import ApiError
+from vibe_web.main import app, get_store
+from vibe_web.store import MemoryStore, PgStore
 
 TOKEN = "test-token"
 EXPECTED = {"CH1": "재계측 권장", "CH2": "정상", "CH3": "베어링 점검 요망",
@@ -264,7 +264,7 @@ def test_no_update_or_delete_paths(client):
 def test_screens_escape_server_values():
     """서버에서 온 값을 innerHTML에 넣기 전에 esc()를 거친다 (XSS 방어)"""
     from pathlib import Path
-    js = (Path(__file__).resolve().parent.parent / "api" / "shared.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parent.parent / "vibe_web" / "static" / "shared.js").read_text(encoding="utf-8")
     assert "function esc(" in js
     for expr in ("${r.channel}", "${r.rpm}", "${c.sha256}", "${v}"):
         assert expr not in js, f"이스케이프 없이 삽입: {expr}"

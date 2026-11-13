@@ -4,7 +4,7 @@ import os
 
 from fastapi import Header
 
-from api.errors import ApiError
+from vibe_web.errors import ApiError
 
 
 def write_enabled() -> bool:

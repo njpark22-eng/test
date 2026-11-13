@@ -14,7 +14,7 @@ import zipfile
 import numpy as np
 
 import vibe_agent as va
-from api.errors import ApiError
+from vibe_web.errors import ApiError
 
 LOCK = threading.RLock()
 MAX_HZ = 600                       # 저장·표시하는 스펙트럼의 최대 주파수 (Hz)
