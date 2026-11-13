@@ -74,6 +74,7 @@
 - 입력 엑셀 수정 차단: `.claude/settings.json`의 deny 규칙(`data/**`, `*.xlsx` Edit/Write)과 PreToolUse 훅(`.claude/hooks/block_input_excel.py`)이 엑셀 수정·삭제·덮어쓰기를 막는다. `--make-data`와 `result-N.xlsx` 생성은 예외.
 - API 키 노출 차단: PreToolUse 훅 `.claude/hooks/guard_demo.py`가 키 값을 출력하는 Bash 명령(echo/printenv/env 덤프 등)과 키 리터럴(`sk-ant-...`)이 든 명령·파일 쓰기를 막는다. deny 규칙에도 `printenv`, `env`를 넣었다.
 - 결과 파일 덮어쓰기 차단: `guard_demo.py`가 기존 `result-N.xlsx/png`의 Edit/Write와 rm/mv/덮어쓰기 명령을 막는다. 결과는 프로그램이 새 번호로만 만든다.
+- 사람 검수 승인: `approve.py`를 사람이 `! python approve.py result-N`으로 직접 실행하면 에이전트 판정을 가린 채 채널별 판정을 입력받고, 결과 파일(xlsx/png)의 SHA-256 해시, 검수자, 시각, 사람/에이전트 판정, 불일치 목록을 `review-N.json`으로 저장한다(기존 파일 덮어쓰기 금지). `python approve.py result-N --check`로 승인 여부와 승인 후 결과 파일 변경 여부를 확인한다(통과 0, 실패 1). `guard_demo.py`가 에이전트의 `approve.py` 실행(`--check` 제외)과 `review-*.json` 작성·수정·삭제를 막고, deny 규칙에도 `review-*.json`의 Write/Edit를 넣었다. 승인은 "사람이 이 절차를 수행했다"는 증거이며 내용을 꼼꼼히 봤는지까지 보장하지는 않는다.
 - 판정 규칙 동기화 검사: PostToolUse 훅 `.claude/hooks/check_rules_sync.py`가 `vibe_agent.py`/tests 수정 후 (1) `rule_verdict`와 `RULES`의 숫자 일치, (2) 기준값(RMS 4.5, 저주파 20, 2X/1X 0.5, 베어링/1X 0.7)이 tests/에 있는지, (3) HEAD 대비 한쪽만 수정되지 않았는지, (4) 기준값 변경 시 tests/도 바뀌었는지를 검사해 어긋나면 알린다.
 - 훅 동작은 `tests/test_hooks.py`로 검증한다.
 - API 키, `.env`는 읽거나 커밋하지 않는다.

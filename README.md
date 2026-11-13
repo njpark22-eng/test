@@ -159,6 +159,17 @@ uv run python vibe_agent.py --ui --offline
 
 실행할 때마다 가장 큰 번호 + 1로 새로 만들기 때문에 **이전 결과를 덮어쓰지 않습니다.** (`result-1`, `result-2`, ...) 이 파일들은 `.gitignore` 대상이라 커밋되지 않습니다.
 
+### 사람 검수 승인 (선택)
+
+결과를 사람이 직접 확인했다는 기록을 남기려면 터미널에서 직접 실행합니다. (Claude Code 안에서는 `! python approve.py result-3`)
+
+```
+python approve.py result-3          # 채널별 판정을 직접 입력하고 yes로 승인 -> review-3.json 생성
+python approve.py result-3 --check  # 승인 여부와, 승인 후 결과 파일이 바뀌지 않았는지 확인
+```
+
+`review-N.json`에는 검수자, 시각, 결과 파일 해시, 사람 판정과 에이전트 판정의 불일치가 기록됩니다. 에이전트는 이 파일을 만들거나 고칠 수 없습니다. 결과 파일처럼 `.gitignore` 대상입니다.
+
 ## 7. 용어와 판정 규칙
 
 | 용어 | 설명 |
@@ -208,6 +219,7 @@ uv run pytest
 ```
 vibe-agent/
 ├─ vibe_agent.py      프로그램 전체 (신호 생성, FFT, 판정, 에이전트, UI, 결과 저장)
+├─ approve.py         사람 검수 승인 파일(review-N.json) 생성/확인
 ├─ data/              시연용 가상 계측 데이터 CH1~CH5.xlsx (입력 원본, 수정 금지)
 ├─ tests/             pytest 테스트
 ├─ .claude/           Claude Code 설정 (에이전트 정의, 안전장치 훅)
@@ -220,4 +232,4 @@ vibe-agent/
 ```
 
 - 동작 세부 사항은 `SPEC.md`, 시연 순서는 `DEMO.md`를 보세요.
-- `.claude/` 아래 설정은 Claude Code로 이 저장소를 수정할 때 입력 엑셀 수정, API 키 노출, 결과 파일 덮어쓰기를 막는 안전장치입니다. 프로그램 실행에는 영향을 주지 않습니다.
+- `.claude/` 아래 설정은 Claude Code로 이 저장소를 수정할 때 입력 엑셀 수정, API 키 노출, 결과 파일 덮어쓰기, 승인 파일 위조를 막는 안전장치입니다. 프로그램 실행에는 영향을 주지 않습니다.
