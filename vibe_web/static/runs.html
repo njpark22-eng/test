@@ -59,6 +59,7 @@ async function showRun(id) {
   out.innerHTML = `<p><a href="/runs">&larr; 이력 목록</a></p>
     <h2>분석 #${esc(run.id)} · ${esc(when(run.created_at))}</h2>
     <p class="note">판정에 쓴 기준값: 최대 피크 RMS ${esc(t.rms_limit)} mm/s, 2X/1X ${esc(t.ratio_2x_over_1x)}, 베어링/1X ${esc(t.ratio_bearing_over_1x)}, 2 Hz 미만 저주파 노이즈 ${esc(t.lowfreq_noise_limit)} mm/s. 저장 당시 값이며 다시 계산하지 않았습니다.</p>
+    ${summaryHtml(run.summary)}
     <h2>판정 결과</h2>${table(run.channels)}
     <h2>FFT 스펙트럼</h2>${run.channels.map(card).join("")}`;
 }

@@ -15,15 +15,12 @@
   <div id="menu"></div>
   <p class="notice" role="note">가상 데이터만 올리세요. 실제 계측 데이터는 금지입니다.</p>
 
-  <label class="field" for="token">쓰기 토큰</label>
-  <input id="token" type="password" autocomplete="off" aria-describedby="tokenHelp">
-  <p class="note" id="tokenHelp">토큰은 이 탭에만 보관되고 탭을 닫으면 지워집니다.</p>
-
   <label class="field" for="count">채널 수 (1~5)</label>
   <select id="count"></select>
 
   <div id="rows"></div>
-  <p class="note">엑셀은 A열 time_s, B열 velocity_mm_s, 샘플링 주파수 5,120 Hz여야 합니다. 파일을 고르면 회전수가 자동으로 채워집니다. 볼 개수 1은 베어링을 쓰지 않는 장비입니다.</p>
+  <p class="note">엑셀은 A열 time_s, B열 velocity_mm_s, 샘플링 주파수 5,120 Hz여야 합니다. 한 번 올린 파일은 저장되어, 다음부터는 &lsquo;저장된 파일&rsquo;에서 골라 다시 올리지 않고 분석할 수 있습니다. 파일을 고르면 회전수가 자동으로 채워집니다. 볼 개수 1은 베어링을 쓰지 않는 장비입니다.</p>
+  <p class="note" id="storedNote"></p>
 
   <p><button class="primary" id="run" type="button" disabled>분석 실행</button></p>
   <p class="error" id="error" role="alert"></p>
@@ -34,59 +31,86 @@
 document.getElementById("menu").innerHTML = nav("/upload");
 
 const $ = id => document.getElementById(id);
-const tokenInput = $("token");
-const state = { cfg: null, files: [], rpm: [], balls: [] };
-
-try { tokenInput.value = sessionStorage.getItem("wt") || ""; } catch (_) {}
-tokenInput.addEventListener("input", () => {
-  try { sessionStorage.setItem("wt", tokenInput.value); } catch (_) {}
-});
+const state = { stored: [], files: [], savedId: [], rpm: [], balls: [] };
 
 function showError(msg) { $("error").textContent = msg || ""; }
-
-function headers() { return { "X-Write-Token": tokenInput.value }; }
 
 async function readError(res) {
   try { return (await res.json()).error || "요청에 실패했습니다"; } catch (_) { return "요청에 실패했습니다"; }
 }
 
+// 저장된 파일 목록 (서버에서 온 파일 이름은 textContent로만 넣는다)
+function optionLabel(f) {
+  const kb = Math.max(1, Math.round(f.size_bytes / 1024));
+  return `#${f.id} · ${f.filename || "이름 없음"} · ${f.channel} · ${kb} KB · ${new Date(f.uploaded_at).toLocaleDateString("ko-KR")}`;
+}
+
+function fillStoredOptions(select) {
+  select.replaceChildren(new Option("저장된 파일 고르기", ""));
+  state.stored.forEach(f => select.appendChild(new Option(optionLabel(f), String(f.id))));
+  select.disabled = state.stored.length === 0;
+}
+
 function renderRows() {
   const n = Number($("count").value);
   state.files = new Array(n).fill(null);
+  state.savedId = new Array(n).fill("");
   state.rpm = new Array(n).fill("");
   state.balls = new Array(n).fill("1");
   $("rows").innerHTML = Array.from({ length: n }, (_, i) => `
     <div class="row" data-i="${i}">
       <span class="rowname">CH${i + 1}</span>
-      <input type="file" accept=".xlsx" aria-label="CH${i + 1} 엑셀 파일">
+      <div class="src">
+        <input type="file" accept=".xlsx" aria-label="CH${i + 1} 새 파일">
+        <select class="stored" aria-label="CH${i + 1} 저장된 파일"></select>
+      </div>
       <input type="number" min="1" max="20000" step="1" placeholder="rpm" aria-label="CH${i + 1} 회전수 (rpm)">
       <input type="number" min="1" max="100" step="1" value="1" aria-label="CH${i + 1} 볼 개수">
-      <span class="status">파일을 고르세요</span>
+      <span class="status">새 파일을 올리거나 저장된 파일을 고르세요</span>
     </div>`).join("");
   document.querySelectorAll(".row").forEach(row => {
     const i = Number(row.dataset.i);
-    const [file, rpm, balls] = row.querySelectorAll("input");
-    file.addEventListener("change", () => inspect(i, row, file.files[0], rpm));
+    const file = row.querySelector('input[type="file"]');
+    const stored = row.querySelector("select.stored");
+    const [, rpm, balls] = row.querySelectorAll("input");
+    fillStoredOptions(stored);
+    file.addEventListener("change", () => {
+      stored.value = "";
+      state.savedId[i] = "";
+      show(i, row, file.files[0] ? "/api/inspect" : null, file.files[0], rpm);
+    });
+    stored.addEventListener("change", () => {
+      file.value = "";
+      state.files[i] = null;
+      state.savedId[i] = stored.value;
+      show(i, row, stored.value ? `/api/files/${stored.value}` : null, null, rpm);
+    });
     rpm.addEventListener("input", () => { state.rpm[i] = rpm.value; refresh(); });
     balls.addEventListener("input", () => { state.balls[i] = balls.value; });
   });
   refresh();
 }
 
-async function inspect(i, row, file, rpmInput) {
+// 새 파일(POST /api/inspect)이나 저장된 파일(GET /api/files/{id})을 확인해 자동 회전수와 앞부분을 보여 준다
+async function show(i, row, url, file, rpmInput) {
   const status = row.querySelector(".status");
-  state.files[i] = null;
   row.querySelector("details")?.remove();
+  state.rpm[i] = ""; rpmInput.value = "";
   showError("");
-  if (!file) { status.textContent = "파일을 고르세요"; refresh(); return; }
+  if (!url) { state.files[i] = null; status.textContent = "새 파일을 올리거나 저장된 파일을 고르세요"; refresh(); return; }
   status.textContent = "확인 중";
-  const fd = new FormData();
-  fd.append("file", file);
   try {
-    const res = await fetch("/api/inspect", { method: "POST", headers: headers(), body: fd });
-    if (!res.ok) { status.textContent = await readError(res); refresh(); return; }
+    let res;
+    if (file) {
+      const fd = new FormData();
+      fd.append("file", file);
+      res = await fetch(url, { method: "POST", body: fd });
+    } else {
+      res = await fetch(url);
+    }
+    if (!res.ok) { status.textContent = await readError(res); state.files[i] = null; state.savedId[i] = ""; refresh(); return; }
     const d = await res.json();
-    state.files[i] = file;
+    if (file) state.files[i] = file;
     rpmInput.value = d.rpm_detected;
     state.rpm[i] = String(d.rpm_detected);
     status.textContent = `${d.samples.toLocaleString("ko-KR")}개 샘플 · 자동 추정 회전수 ${d.rpm_detected} rpm`;
@@ -100,7 +124,7 @@ async function inspect(i, row, file, rpmInput) {
 }
 
 function refresh() {
-  const ready = state.files.every(Boolean) && state.rpm.every(v => v !== "");
+  const ready = state.files.every((f, i) => f || state.savedId[i]) && state.rpm.every(v => v !== "");
   $("run").disabled = !ready;
 }
 
@@ -108,11 +132,14 @@ $("run").addEventListener("click", async () => {
   showError("");
   $("run").disabled = true;
   const fd = new FormData();
-  state.files.forEach(f => fd.append("files", f));
+  state.files.forEach((f, i) => {
+    fd.append("file_ids", state.savedId[i] || "");
+    if (!state.savedId[i]) fd.append("files", f);
+  });
   state.rpm.forEach(v => fd.append("rpm", v));
   state.balls.forEach(v => fd.append("balls", v));
   try {
-    const res = await fetch("/api/runs", { method: "POST", headers: headers(), body: fd });
+    const res = await fetch("/api/runs", { method: "POST", body: fd });
     if (!res.ok) { showError(await readError(res)); refresh(); return; }
     const run = await res.json();
     location.href = `/runs/${run.id}`;
@@ -126,9 +153,12 @@ $("count").addEventListener("change", renderRows);
 $("count").innerHTML = [1, 2, 3, 4, 5].map(n => `<option value="${n}"${n === 5 ? " selected" : ""}>${n}</option>`).join("");
 renderRows();
 
-fetch("/api/config").then(r => r.json()).then(cfg => {
-  state.cfg = cfg;
-  if (!cfg.write_enabled) showError("서버에 쓰기 토큰이 설정되지 않아 올릴 수 없습니다. 관리자가 WRITE_TOKEN을 설정해야 합니다");
+// 저장된 파일 목록은 있으면 채운다. 없거나 저장소를 쓸 수 없으면 새 파일 올리기만 가능하다
+fetch("/api/files").then(async res => {
+  if (!res.ok) { $("storedNote").textContent = `저장된 파일을 불러오지 못했습니다. ${await readError(res)}`; return; }
+  state.stored = (await res.json()).files;
+  document.querySelectorAll("select.stored").forEach(fillStoredOptions);
+  $("storedNote").textContent = state.stored.length ? `저장된 파일 ${state.stored.length}개` : "저장된 파일이 아직 없습니다. 올리면 여기에 쌓입니다.";
 }).catch(() => {});
 </script>
 </body>

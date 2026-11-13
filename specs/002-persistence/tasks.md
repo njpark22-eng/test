@@ -96,3 +96,13 @@ description: "가상 계측 데이터 저장과 결과 이력 구현 작업 목�
 ## 구현 전략
 
 MVP는 1~3단계(US1)다. 업로드→분석→저장이 되면 이력(US2)은 읽기 기능만 더하면 된다. 각 단계 뒤에 `uv run pytest`를 돌린다. 커밋과 push는 사용자가 요청할 때만 한다.
+
+---
+
+## 변경 이력: 2026-11-13 사용자 요청 반영
+
+- [X] T028 쓰기 토큰 제거: `vibe_web/auth.py` 삭제, 쓰기 엔드포인트의 토큰 의존성과 `/api/config`의 `write_enabled` 제거, 올리기 화면의 토큰 입력 제거, 관련 테스트와 문서 수정 (`vibe_web/main.py`, `vibe_web/static/upload.html`, `tests/test_persistence.py`)
+- [X] T029 저장된 파일 다시 쓰기: `measurement_files.filename` 열 추가, `list_files`/`get_file`(메모리·Postgres), `GET /api/files`, `GET /api/files/{id}`, `POST /api/runs`의 `file_ids`, 올리기 화면의 '저장된 파일 고르기' (`vibe_web/store.py`, `vibe_web/main.py`, `vibe_web/static/upload.html`)
+- [X] T030 이력 상세의 판정 근거·인사이트·요약: `vibe_web/insight.py`와 `GET /api/runs/{id}` 응답의 `insight`, `summary`, 화면의 '판정 근거 / 인사이트 / 그래프 읽기'와 요약 (`vibe_web/insight.py`, `vibe_web/static/shared.js`, `vibe_web/static/runs.html`)
+- [X] T031 테스트 추가: 저장된 파일 재사용(`tests/test_persistence.py`), 근거·인사이트·요약(`tests/test_insight.py`)
+- [X] T032 `api/` 폴더 규칙 반영: Vercel의 `conflicting_file_path` 배포 실패로 앱 코드와 화면을 `vibe_web/`로 이동 (research.md 10번)

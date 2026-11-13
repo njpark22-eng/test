@@ -6,7 +6,7 @@
 
 ## 요약
 
-`001-web-demo`의 FastAPI 앱에 쓰기 기능을 더한다. 사용자가 가상 엑셀을 올리면(토큰 필요) 서버가 `vibe_agent`의 함수로 분석하고, 원본 바이트와 분석 결과를 Neon Postgres에 추가만 가능한 형태로 저장한다. 저장된 실행은 누구나 목록·상세로 본다. 기준값은 고정이라 버전 관리 기능이 없고, 판정에 쓴 값을 결과와 함께 기록한다. 근거는 [research.md](research.md)에 있다.
+`001-web-demo`의 FastAPI 앱에 쓰기 기능을 더한다. 사용자가 가상 엑셀을 올리거나 저장된 파일을 고르면 서버가 `vibe_agent`의 함수로 분석하고, 원본 바이트와 분석 결과를 Neon Postgres에 추가만 가능한 형태로 저장한다. 저장된 실행은 누구나 목록·상세로 보며, 상세에는 판정 근거와 인사이트가 붙는다. 기준값은 고정이라 버전 관리 기능이 없고, 판정에 쓴 값을 결과와 함께 기록한다. 근거는 [research.md](research.md)에 있다.
 
 ## 기술 맥락
 
@@ -24,7 +24,7 @@
 
 **성능 목표**: 5채널 업로드부터 결과 표시까지 수 초. 목록·상세 1초 이내(가상 데이터 100건 기준).
 
-**제약**: 쓰기 토큰 `WRITE_TOKEN`(환경변수), 요청 본문 약 4.5 MB 제한 안에서 파일 1개 1 MB, 합계 4 MB, 시간당 30회. 저장된 원본과 결과는 수정·삭제 불가. `vibe_agent.py`는 수정하지 않는다.
+**제약**: 로그인·토큰 없음(읽기·쓰기 공개), 요청 본문 약 4.5 MB 제한 안에서 파일 1개 1 MB, 합계 4 MB, 시간당 30회. 저장된 원본과 결과는 수정·삭제 불가. `vibe_agent.py`는 수정하지 않는다.
 
 **규모/범위**: 화면 3개(올리기, 이력 목록·상세), 엔드포인트 6개, 테이블 4개.
 
@@ -34,7 +34,7 @@
 |---|---|---|
 | I. 입력 원본 불변 | 통과 | 저장소의 `data/*.xlsx`는 건드리지 않는다. 올린 원본은 DB에 추가만 하고 DB 트리거가 UPDATE/DELETE를 막는다. `result-N`, `review-N.json`은 만들지 않는다. |
 | II. 판정 로직 단일 출처 | 통과 | `va.read_xlsx`, `va.detect_rpm`, `va.rpm_mismatch`, `va.spectrum`, `va.analyze_signal`, `va.rule_verdict`를 호출한다. `vibe_agent.py`는 수정하지 않는다. 2X/1X 0.5, 베어링/1X 0.7은 코드 상수가 없어 경계 테스트로 고정값과의 일치를 확인한다. |
-| III. 가상 데이터와 비밀 값 | 통과 | 가상 데이터만 받고 화면에 경고를 표시한다. `DATABASE_URL`, `WRITE_TOKEN`은 환경변수로만 받고 코드·로그·응답에 남기지 않는다. |
+| III. 가상 데이터와 비밀 값 | 통과 | 가상 데이터만 받고 화면에 경고를 표시한다. `DATABASE_URL`은 환경변수로만 받고 코드·로그·응답에 남기지 않는다. |
 | IV. 테스트와 동기화 검사 | 통과(구현 시 확인) | 기준값을 바꾸지 않으므로 동기화 대상 변경이 없다. 테스트를 추가하고 문서의 테스트 개수를 갱신한다. |
 | V. 판정과 근거 수치가 먼저 | 통과 | 결과 화면은 판정 표와 FFT 그래프 중심이다. 판정 색은 의미색, 나머지는 파랑·회색. |
 
@@ -66,7 +66,7 @@ vibe_web/
 ├── main.py              # 앱과 라우트 (001 확장)
 ├── analysis.py          # vibe_agent 호출을 잠금 아래에서 감싸는 분석 함수
 ├── store.py             # 저장소: PgStore, MemoryStore, 스키마 SQL
-├── auth.py              # 쓰기 토큰 검사
+├── insight.py           # 이력 상세의 판정 근거·인사이트·요약 문구 (저장하지 않고 요청 시 생성)
 ├── errors.py            # API 오류
 └── static/
     ├── page.html        # 001 판정 화면 (공통 파일 사용으로 정리)
@@ -76,7 +76,7 @@ vibe_web/
     └── shared.js        # 공통 스크립트(배지, 스펙트럼 SVG)
 tests/
 ├── test_web.py          # 001 (기존)
-├── test_persistence.py  # 002: 업로드, 검증, 저장, 이력, 토큰, 읽기 전용
+├── test_persistence.py  # 002: 업로드, 검증, 저장, 저장된 파일 재사용, 이력, 읽기 전용
 └── test_store_pg.py     # 실제 DB (TEST_DATABASE_URL 있을 때만)
 vercel.json              # includeFiles에 api/** 추가
 pyproject.toml / uv.lock # psycopg, python-multipart 추가

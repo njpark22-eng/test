@@ -20,6 +20,7 @@ SCHEMA_SQL = [
         channel text NOT NULL CHECK (channel IN ('CH1','CH2','CH3','CH4','CH5')),
         uploaded_at timestamptz NOT NULL DEFAULT now()
     )""",
+    "ALTER TABLE measurement_files ADD COLUMN IF NOT EXISTS filename text",
     """CREATE TABLE IF NOT EXISTS analysis_runs (
         id bigserial PRIMARY KEY,
         created_at timestamptz NOT NULL DEFAULT now(),
@@ -81,8 +82,10 @@ class MemoryStore:
             for c in channels:
                 sha = sha256_hex(c["content"])
                 if sha not in self.files and sha not in new_files:
-                    new_files[sha] = {"sha256": sha, "content": c["content"], "channel": c["channel"],
-                                      "size_bytes": len(c["content"])}
+                    new_files[sha] = {"id": len(self.files) + len(new_files) + 1, "sha256": sha,
+                                      "content": c["content"], "channel": c["channel"],
+                                      "size_bytes": len(c["content"]), "filename": c.get("filename"),
+                                      "uploaded_at": datetime.now(timezone.utc)}
                 rows.append({**{k: c[k] for k in ("channel", "rpm", "balls", "verdict", "result", "spectrum")},
                              "sha256": sha})
             run = {"id": len(self.runs) + 1, "created_at": datetime.now(timezone.utc),
@@ -90,6 +93,17 @@ class MemoryStore:
             self.files.update(new_files)
             self.runs.append(run)
             return run["id"]
+
+    def list_files(self, limit: int = 100) -> list[dict]:
+        files = sorted(self.files.values(), key=lambda f: f["id"], reverse=True)[:limit]
+        return [{"id": f["id"], "sha256": f["sha256"], "channel": f["channel"], "size_bytes": f["size_bytes"],
+                 "filename": f["filename"], "uploaded_at": f["uploaded_at"].isoformat()} for f in files]
+
+    def get_file(self, file_id: int) -> dict | None:
+        for f in self.files.values():
+            if f["id"] == file_id:
+                return {k: f[k] for k in ("id", "sha256", "content", "channel", "size_bytes", "filename")}
+        return None
 
     def list_runs(self, limit: int = 100) -> list[dict]:
         out = []
@@ -166,9 +180,9 @@ class PgStore:
                 for c in channels:
                     sha = sha256_hex(c["content"])
                     row = conn.execute(
-                        "INSERT INTO measurement_files (sha256, content, size_bytes, channel) "
-                        "VALUES (%s, %s, %s, %s) ON CONFLICT (sha256) DO NOTHING RETURNING id",
-                        (sha, c["content"], len(c["content"]), c["channel"])).fetchone()
+                        "INSERT INTO measurement_files (sha256, content, size_bytes, channel, filename) "
+                        "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (sha256) DO NOTHING RETURNING id",
+                        (sha, c["content"], len(c["content"]), c["channel"], c.get("filename"))).fetchone()
                     if row is None:
                         row = conn.execute("SELECT id FROM measurement_files WHERE sha256 = %s", (sha,)).fetchone()
                     file_ids.append(row[0])
@@ -182,6 +196,25 @@ class PgStore:
                         (run_id, file_id, c["channel"], c["rpm"], c["balls"], c["verdict"],
                          Jsonb(c["result"]), Jsonb(c["spectrum"])))
                 return run_id
+        return self._run(fn)
+
+    def list_files(self, limit: int = 100) -> list[dict]:
+        def fn(conn):
+            rows = conn.execute(
+                "SELECT id, sha256, channel, size_bytes, filename, uploaded_at "
+                "FROM measurement_files ORDER BY id DESC LIMIT %s", (limit,)).fetchall()
+            return [{"id": r[0], "sha256": r[1], "channel": r[2], "size_bytes": r[3], "filename": r[4],
+                     "uploaded_at": r[5].isoformat()} for r in rows]
+        return self._run(fn)
+
+    def get_file(self, file_id: int) -> dict | None:
+        def fn(conn):
+            r = conn.execute("SELECT id, sha256, content, channel, size_bytes, filename "
+                             "FROM measurement_files WHERE id = %s", (file_id,)).fetchone()
+            if r is None:
+                return None
+            return {"id": r[0], "sha256": r[1], "content": bytes(r[2]), "channel": r[3],
+                    "size_bytes": r[4], "filename": r[5]}
         return self._run(fn)
 
     def list_runs(self, limit: int = 100) -> list[dict]:

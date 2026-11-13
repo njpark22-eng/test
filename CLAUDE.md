@@ -27,7 +27,7 @@
 - 배경: Vercel이 `pyproject.toml`만 보고 Python 웹 앱으로 판단해 `PYTHON_ENTRYPOINT_NOT_FOUND`로 빌드가 실패했다. `vibe_agent.py`는 CLI/tkinter 도구라 진입점이 없으므로 웹 진입점을 따로 둔다.
 - 구조: `api/index.py`는 진입점 한 줄(`from vibe_web.main import app`)뿐이고, 앱 코드(`main.py`, `analysis.py`, `store.py`, `auth.py`, `errors.py`)와 화면 파일(`static/*.html`, `shared.css`, `shared.js`)은 `vibe_web/` 패키지에 둔다. **`api/` 폴더에는 진입점 외 파일을 두지 않는다**(Vercel이 `api/`의 모든 파일을 함수 경로로 취급해, 확장자를 뺀 이름이 같은 `shared.js`/`shared.css`가 `conflicting_file_path`로 빌드를 실패시켰다). `vibe_agent`를 import해서 쓰고 FFT·판정 로직을 다시 구현하지 않는다(`spectrum`, `analyze_signal`, `rule_verdict`, `RULES` 재사용). 웹 때문에 `vibe_agent.py`의 판정 로직을 바꿔야 하면 기존 규칙(`rule_verdict`와 `RULES` 동시 수정, tests/ 동시 수정)을 그대로 따른다.
 - 저장소의 `data/CH1~CH5.xlsx`는 읽기만 한다(수정·덮어쓰기 금지). `result-N.xlsx/png`, `review-N.json`은 웹에서 만들지 않는다(서버리스 파일 시스템은 쓰기 불가). `--make-data`와 `data/` 수정 차단 규칙은 그대로 유효하다.
-- 쓰기(002-persistence): 사용자가 올린 가상 엑셀 원본과 분석 결과를 Neon Postgres에 추가만 가능하게 저장한다(수정·삭제 금지, DB 트리거로도 차단). 쓰기(`/api/inspect`, `/api/runs`)는 헤더 `X-Write-Token`이 환경변수 `WRITE_TOKEN`과 같아야 하고 읽기(`/api/runs`, `/runs`)는 공개다. 환경변수 `DATABASE_URL`(Neon 풀링 주소), `WRITE_TOKEN`은 코드·커밋·로그·응답에 남기지 않는다. 데이터는 가상 신호뿐이고 업로드 화면에 '가상 데이터만 올리세요'를 항상 표시한다. 한도: 파일 1개 1 MB, 합계 4 MB, 채널 1~5개, 시간당 30회. 기준값(RMS 4.5, 2X/1X 0.5, 베어링/1X 0.7, 저주파 20)은 고정이며 웹에서 바꾸지 않고 결과에 기록만 한다. `vibe_agent.analyze_signal`이 전역(`SIGNALS`, `RPM`, `BALLS`)을 읽으므로 전역을 건드리는 코드는 `vibe_web/analysis.py`의 잠금 아래에서만 실행한다.
+- 쓰기(002-persistence): 사용자가 올린 가상 엑셀 원본과 분석 결과를 Neon Postgres에 추가만 가능하게 저장한다(수정·삭제 금지, DB 트리거로도 차단). 쓰기 토큰은 없다(사용자 결정, 2026-11-13): 읽기·쓰기 모두 공개이며 남용은 크기·횟수·형식 검증으로만 제한한다. 환경변수 `DATABASE_URL`(Neon 풀링 주소)은 코드·커밋·로그·응답에 남기지 않는다. 올린 파일은 DB에 남고 `/upload`에서 저장된 파일(`/api/files`, `file_ids`)을 골라 다시 올리지 않고 분석할 수 있다. 이력 상세(`GET /api/runs/{id}`)의 판정 근거·인사이트·요약은 `vibe_web/insight.py`가 저장된 값으로 요청 시 만들며(저장하지 않음, 판정을 다시 계산하지 않음) 문구는 슬롭 방지 규칙을 따른다. 데이터는 가상 신호뿐이고 업로드 화면에 '가상 데이터만 올리세요'를 항상 표시한다. 한도: 파일 1개 1 MB, 합계 4 MB, 채널 1~5개, 시간당 30회. 기준값(RMS 4.5, 2X/1X 0.5, 베어링/1X 0.7, 저주파 20)은 고정이며 웹에서 바꾸지 않고 결과에 기록만 한다. `vibe_agent.analyze_signal`이 전역(`SIGNALS`, `RPM`, `BALLS`)을 읽으므로 전역을 건드리는 코드는 `vibe_web/analysis.py`의 잠금 아래에서만 실행한다.
 - 테스트는 실제 DB 없이 `MemoryStore`로 돌린다. 실제 DB 테스트(`tests/test_store_pg.py`)는 `TEST_DATABASE_URL`(운영이 아닌 테스트용 브랜치)이 있을 때만 실행한다.
 - 판정 방식: 규칙 기반(`--offline`과 같은 결과)만 쓴다. 웹에서 Claude API를 호출하지 않고 `ANTHROPIC_API_KEY`를 Vercel 환경변수로 넣지 않는다.
 - 데이터: 가상 신호만 쓴다. 실제 계측 데이터, 개인정보를 올리지 않고 화면에 "가상 데이터, 규칙 기반 판정"임을 표시한다.
@@ -38,7 +38,7 @@
   - 기대 판정: CH1 재계측 권장 / CH2 정상 / CH3 베어링 점검 요망 / CH4 발란싱 요망 / CH5 정렬 요망
 - 사람 검수 승인(`approve.py`)은 웹에 포함하지 않는다. 사람이 `! python approve.py result-N`으로만 한다.
 - 배포: 웹 의존성(fastapi 등)을 추가하면 `pyproject.toml`과 `uv.lock`을 같이 갱신한다. 로컬 확인은 `uv run uvicorn api.index:app`. 웹 코드를 추가하면 tests/에 엔드포인트 테스트(5채널 기대 판정 일치)를 넣고 `uv run pytest`를 돌린다.
-- 시연 문서(DEMO.md, PILOT.md, RETRO.md)의 테스트 개수(현재 143개)는 테스트를 추가하면 같이 고친다.
+- 시연 문서(DEMO.md, PILOT.md, RETRO.md)의 테스트 개수(현재 157개)는 테스트를 추가하면 같이 고친다.
 
 ### 프레임워크와 환경 설정 (Vercel)
 - 프레임워크: FastAPI + 정적 HTML/바닐라 JS 한 페이지. 빌드 단계(npm, 번들러)를 두지 않고, 그래프는 서버가 준 스펙트럼 배열을 SVG/canvas로 그린다(외부 CDN을 쓰면 버전을 고정한다). 이유: Vercel이 FastAPI 진입점을 자동 인식하고, 기존 Python 판정 코드를 그대로 재사용하며, 시연 중 장애 지점이 적다.

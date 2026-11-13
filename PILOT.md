@@ -24,7 +24,7 @@
 | 2. 판정 정확도 | 5/5 | CH1 재계측 권장, CH2 정상, CH3 베어링 점검 요망, CH4 발란싱 요망, CH5 정렬 요망이 모두 기대 판정과 일치 | 통과 (5/5) |
 | 3. 판정 근거 수치 제시 | 채널별 100% | 판정 설명 줄마다 피크 RMS, 2X/1X 포함. 베어링 사용 채널(CH3)은 BPFO, BPFO/1X도 포함 | 통과 (5/5) |
 
-- `uv run pytest` 143개 통과, `claude plugin validate .` 통과(`.claude-plugin` 매니페스트가 없어 `.claude/` 아래 컴포넌트만 검증).
+- `uv run pytest` 157개 통과, `claude plugin validate .` 통과(`.claude-plugin` 매니페스트가 없어 `.claude/` 아래 컴포넌트만 검증).
 
 ## 볼 화면 (확인용 증거)
 - `uv run python vibe_agent.py --offline` 실행 결과 (채널별 판정 표)

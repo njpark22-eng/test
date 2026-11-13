@@ -11,9 +11,10 @@
 | `content` | bytea | 필수 | 올린 엑셀 원본 바이트. 크기 1 MB 이하 |
 | `size_bytes` | integer | 필수, 1 이상 1,048,576 이하 | |
 | `channel` | text | 필수, `CH1`~`CH5` | 처음 올릴 때의 채널 |
+| `filename` | text | 선택, 200자 이하 | 처음 올릴 때의 파일 이름(경로 제외). 저장된 파일 목록에 보인다. 기존 테이블에는 `ADD COLUMN IF NOT EXISTS`로 추가 |
 | `uploaded_at` | timestamptz | 필수, 기본 `now()` | |
 
-같은 해시를 다시 올리면 새 행을 만들지 않고 기존 `id`를 참조한다.
+같은 해시를 다시 올리거나 저장된 파일을 골라 분석하면 새 행을 만들지 않고 기존 `id`를 참조한다(파일 이름도 처음 값 유지).
 
 ## analysis_runs (분석 실행)
 

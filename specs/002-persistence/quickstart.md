@@ -4,9 +4,7 @@
 
 ## 준비
 
-- 환경변수 두 개가 필요하다. 값은 저장소·로그·화면에 남기지 않는다.
-  - `DATABASE_URL`: Neon 연결 문자열(풀링 주소 권장)
-  - `WRITE_TOKEN`: 쓰기 토큰(직접 정한 긴 무작위 문자열)
+- 환경변수 `DATABASE_URL`(Neon 연결 문자열, 풀링 주소 권장)이 필요하다. 값은 저장소·로그·화면에 남기지 않는다. 쓰기 토큰은 없다.
 - 로컬은 셸에 설정하거나 저장소 밖의 설정으로 넣는다. `.env`는 커밋하지 않는다. Vercel은 프로젝트 환경변수(Sensitive)에 넣는다.
 - 테스트용 DB는 Neon 브랜치를 따로 만들어 `TEST_DATABASE_URL`로 지정하는 것을 권한다. 운영 DB에 테스트 데이터를 쌓지 않기 위해서다.
 
@@ -24,7 +22,7 @@ uv run pytest
 uv run uvicorn api.index:app
 ```
 
-`DATABASE_URL`, `WRITE_TOKEN`을 설정한 셸에서 실행한다. 처음 DB를 쓰는 요청이 테이블과 트리거를 만든다(멱등).
+`DATABASE_URL`을 설정한 셸에서 실행한다. 처음 DB를 쓰는 요청이 테이블과 트리거를 만든다(멱등).
 
 기대 결과
 - `http://127.0.0.1:8000/upload`에 '가상 데이터만 올리세요' 문구가 보인다.
@@ -36,7 +34,8 @@ uv run uvicorn api.index:app
 
 - 같은 5개 파일의 판정이 `uv run python vibe_agent.py --offline`과 같다.
 - 올린 파일의 SHA-256과 상세에 보이는 해시가 같다.
-- 토큰 없이 올리기를 시도하면 거부되고, 목록과 상세는 토큰 없이 열린다.
+- 같은 파일을 다시 올리지 않고 `/upload`의 '저장된 파일 고르기'에서 골라 분석하면 같은 판정이 나오고 저장된 원본 수는 늘지 않는다.
+- 이력 상세의 채널마다 판정 근거 수치와 규칙, 그래프 읽기, 해석·조치가 보이고 맨 위에 요약과 우선순위가 보인다. 근거 수치가 위 표와 같다.
 - `data/*.xlsx`가 바뀌지 않았다(`git status`에 변경 없음).
 - 저장된 행을 수정·삭제하려는 SQL이 거부된다(`TEST_DATABASE_URL` 테스트 또는 Neon 콘솔에서 확인).
 
@@ -48,9 +47,9 @@ uv run uvicorn api.index:app
 
 ## 5. Vercel 배포 확인
 
-1. 프로젝트 환경변수에 `DATABASE_URL`, `WRITE_TOKEN`(Sensitive)을 넣는다.
+1. 프로젝트 환경변수에 `DATABASE_URL`(Sensitive)을 넣는다.
 2. `main`에 push하면 빌드된다. 빌드 로그에서 `psycopg`, `python-multipart` 설치와 함수 크기를 본다.
-3. Preview에서 위 2번 시나리오를 수행한다. `/api/config`의 `write_enabled`가 `true`인지 먼저 본다.
+3. Preview에서 위 2번 시나리오를 수행한다.
 4. 업로드 한 번의 소요 시간을 기록한다.
 5. 문제가 없으면 Production으로 올린다.
 
@@ -58,7 +57,6 @@ uv run uvicorn api.index:app
 
 | 증상 | 확인할 것 |
 |---|---|
-| 업로드가 401 | 입력한 토큰과 Vercel의 `WRITE_TOKEN`, `/api/config`의 `write_enabled` |
 | 503 | `DATABASE_URL`이 있는지, 풀링 주소인지, 연결 허용 설정 |
 | 413 | 파일이 1 MB, 합계 4 MB 이내인지 |
 | 422 rpm 경고 | 입력 rpm이 신호의 1X와 맞는지(자동 입력값 사용) |

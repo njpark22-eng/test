@@ -78,6 +78,25 @@ function spectrum({ r, f, amp }) {
   </svg>`;
 }
 
+// 이력 상세: 판정 근거, 인사이트, 그래프 읽기 (서버가 저장된 값으로 만든 문구)
+function insightHtml(c) {
+  const i = c.insight;
+  if (!i) return "";
+  const list = items => `<ul>${items.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
+  return `<div class="insight">
+    <h3>판정 근거</h3>${list(i.basis)}
+    <h3>인사이트</h3><p>${esc(i.meaning)}</p><p><strong>조치</strong> ${esc(i.action)}</p>
+    <h3>그래프 읽기</h3>${list(i.graph)}
+  </div>`;
+}
+
+function summaryHtml(s) {
+  if (!s) return "";
+  const items = s.priorities.map(t => `<li>${esc(t)}</li>`).join("");
+  return `<section class="summary"><h2>요약</h2><p>${esc(s.headline)}</p>
+    ${items ? `<p class="note">우선순위</p><ol>${items}</ol>` : ""}<p class="note">${esc(s.note)}</p></section>`;
+}
+
 function card(c) {
   const { r, verdict } = c;
   const bearing = r.bearing_BPFO_hz === null ? "베어링 미사용" : `볼 ${esc(r.bearing_balls)}개`;
@@ -88,5 +107,5 @@ function card(c) {
   return `<section class="card">
     <header><span class="name">${esc(r.channel)}</span>${badge(verdict)}
       <span class="meta">${esc(r.rpm)} rpm · 1X ${fmt(r.shaft_1X_hz, 1)} Hz · ${bearing}</span></header>
-    ${note}${spectrum(c)}${hash}</section>`;
+    ${note}${spectrum(c)}${insightHtml(c)}${hash}</section>`;
 }
