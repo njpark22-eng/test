@@ -71,5 +71,6 @@
 - 분석 실행 시 결과 엑셀과 함께 FFT 그래프 + 설명 그림(`result-N.png`)도 저장한다(위 '출력 파일: 그림' 참고).
 
 ### 보안/운영
+- 입력 엑셀 수정 차단: `.claude/settings.json`의 deny 규칙(`data/**`, `*.xlsx` Edit/Write)과 PreToolUse 훅(`.claude/hooks/block_input_excel.py`)이 엑셀 수정·삭제·덮어쓰기를 막는다. `--make-data`와 `result-N.xlsx` 생성은 예외.
 - API 키, `.env`는 읽거나 커밋하지 않는다.
 - 코드 수정 후에는 항상 `uv run pytest`를 실행한다.

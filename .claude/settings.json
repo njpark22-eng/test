@@ -5,7 +5,15 @@
       "Read(./.env.*)",
       "Bash(rm -rf:*)",
       "Bash(git push --force:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Edit(./data/**)",
+      "Write(./data/**)",
+      "Edit(**/*.xlsx)",
+      "Write(**/*.xlsx)",
+      "Edit(**/*.xlsm)",
+      "Write(**/*.xlsm)",
+      "Edit(**/*.xls)",
+      "Write(**/*.xls)"
     ]
   },
   "hooks": {
@@ -13,7 +21,21 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "uv run pytest -q" }
+          {
+            "type": "command",
+            "command": "uv run pytest -q"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/block_input_excel.py"
+          }
         ]
       }
     ]
